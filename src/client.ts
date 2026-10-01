@@ -64,10 +64,15 @@ export class OutSystemsClient {
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
     });
 
-    // Attempt JSON parse; fall back to raw text so tests can still assert
+    // Attempt JSON parse; fall back to raw text so tests can still assert.
+    // Match both "application/json" and structured-suffix JSON types such as
+    // "application/problem+json" (RFC 7807), which ODC uses for its built-in
+    // validation error responses.
     let data: T;
     const contentType = response.headers.get("content-type") ?? "";
-    if (contentType.includes("application/json")) {
+    const isJson =
+      contentType.includes("application/json") || contentType.includes("+json");
+    if (isJson) {
       data = (await response.json()) as T;
     } else {
       data = (await response.text()) as unknown as T;
@@ -110,10 +115,12 @@ export class OutSystemsClient {
     path: string,
     params?: Record<string, string | number | boolean>
   ): string {
-    const url = new URL(
-      path.startsWith("/") ? path : `/${path}`,
-      this.baseUrl
-    );
+    // Join base + path explicitly. We avoid `new URL(path, base)` because an
+    // absolute path (leading "/") resolves against the origin only and would
+    // discard any path segments in baseUrl (e.g. "/EmployeeCatalog/rest/EmployeeAPI").
+    // baseUrl already has its trailing slash stripped in the constructor.
+    const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+    const url = new URL(this.baseUrl + normalizedPath);
 
     if (params) {
       for (const [key, value] of Object.entries(params)) {

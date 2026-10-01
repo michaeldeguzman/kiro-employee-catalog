@@ -105,6 +105,38 @@ Before constructing entity actions, verify or specify the existence of these hel
 
 ---
 
-## 4. Instruction for BRD and Agent Scaffolding
+## 4. Exposed REST API Conventions
+
+When creating, updating, or wiring exposed REST API endpoints via OutSystems MCP:
+
+### Core Rules
+- Endpoints must NEVER call built-in entity actions (`Create{Entity}`, `Update{Entity}`, `CreateOrUpdate{Entity}`, `Delete{Entity}`) directly[cite: 1, 5].
+- Endpoints must delegate to the corresponding `{Entity}` CRUD wrapper actions or aggregates[cite: 1, 5].
+- Endpoints must unpack `EntityActionResult` and map the HTTP response status code accordingly[cite: 1, 5].
+- Use `HTTP.Response_SetStatusCode` (or ODC equivalent) to set response codes explicitly.
+
+### Standard REST Endpoint Pattern for `{Entity}`
+
+| HTTP Method | Route | Target Logic | Success Code & Body | Error / Validation Handling |
+|---|---|---|---|---|
+| `POST` | `/{entities}` | `{Entity}_Upsert`[cite: 1, 5] | **201 Created**<br>Return `{ Id: Id, ... }`[cite: 1, 3] | If `EntityActionResult.IsSuccess = False`:<br>- Set **409 Conflict** if error indicates duplicate/unique constraint.<br>- Set **400 Bad Request** for validation failures.<br>Return `{ message: CombinedEntityMessageText }`[cite: 1, 5]. |
+| `GET` | `/{entities}` | Aggregate `Get{Entities}` | **200 OK**<br>Return List of `{Entity}`[cite: 3] | Filter by `{Entity}.IsActive = True` by default[cite: 1, 5]. Support pagination (`page`, `pageSize`)[cite: 3]. |
+| `GET` | `/{entities}/{id}` | Aggregate `Get{Entity}ById`[cite: 3] | **200 OK**<br>Return `{Entity}` record[cite: 3] | Filter by `{Entity}.Id = Id` and `{Entity}.IsActive = True`[cite: 1, 5]. If empty, set **404 Not Found**. |
+| `PUT` / `PATCH` | `/{entities}/{id}` | `{Entity}_Upsert`[cite: 1, 5] | **200 OK**<br>Return `{ Id: Id }` | Map incoming route `Id` into `Source.Id`. If `EntityActionResult.IsSuccess = False`, set **400 Bad Request** with `CombinedEntityMessageText`[cite: 1, 5]. |
+| `DELETE` | `/{entities}/{id}` | `{Entity}_Remove`[cite: 1, 5] | **204 No Content**<br>(No body) | Wrap in exception handler: if `ProcessingException` is caught (from `_GetCanRemove`), map to **400 Bad Request** or **404 Not Found** with the exception message[cite: 1, 5]. |
+
+### Standard Flow for Mutation Endpoints (POST / PUT)
+
+1. Map Request payload into `Source` (`{Entity}` Record)[cite: 1, 5].
+2. Call `{Entity}_Upsert(Source)`[cite: 1, 5].
+3. Check `EntityActionResult.IsSuccess`[cite: 1, 5]:
+   - **True**: Set Status Code to `201` (for POST) or `200` (for PUT), map output `Id` to response structure, and End[cite: 1, 3, 5].
+   - **False**: Set Status Code to `400` or `409`, map `CombinedEntityMessageText` to error response structure, and End[cite: 1, 5].
+4. Exception Handler:
+   - Catch `AllExceptions`: Set Status Code to `500`, map `ExceptionMessage`, and End.
+
+---
+
+## 5. Instruction for BRD and Agent Scaffolding
 - When generating BRDs for **OutSystems AI Mentor Web**, explicitly include the 6 standard fields and define these 4 action contracts so Mentor sets up the correct architecture from the start[cite: 1].
 - When writing integration tests (e.g., Vitest), assert soft deletes by checking that a deleted record has `IsActive = False` and returns appropriate error messages from `_GetCanRemove`[cite: 1].

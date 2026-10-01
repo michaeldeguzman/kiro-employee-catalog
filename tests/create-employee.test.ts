@@ -32,10 +32,37 @@ interface CreateEmployeeResponse {
   Email: string;
 }
 
-/** OutSystems built-in validation error shape (400 responses). */
+/** Custom error shape returned by the EmployeeAPI action (409 / app-level 400). */
 interface OutSystemsErrorResponse {
   Errors: string[];
   StatusCode: number;
+}
+
+/**
+ * ODC framework-level validation error shape. Returned by the platform's
+ * built-in request validation (e.g. missing body) BEFORE the action flow runs,
+ * so it does not use our custom { Errors, StatusCode } shape.
+ */
+interface OdcValidationErrorResponse {
+  errors: { ValidationErrors?: string[] } & Record<string, string[]>;
+  title: string;
+  status: number;
+}
+
+/**
+ * Recognisable prefix for every email this suite creates, so test-generated
+ * records can be filtered/cleaned up later in the tenant.
+ */
+const TEST_EMAIL_PREFIX = "kiro-test";
+
+/**
+ * Unique email per test run so the live create path returns 201 instead of 409
+ * on repeated runs. All test emails share TEST_EMAIL_PREFIX for easy filtering.
+ */
+function uniqueEmail(label = "s1"): string {
+  return `${TEST_EMAIL_PREFIX}+${label}.${Date.now()}.${Math.floor(
+    Math.random() * 1e6
+  )}@example.com`;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -74,13 +101,19 @@ describe("Use Case #1 — Create Employee Record", () => {
   // ── S1: Happy path ────────────────────────────────────────────────────────
 
   describe("S1 — given a valid payload, when POST /employees, then 201 with generated Id", () => {
-    it("returns status 201", async () => {
-      const payload: CreateEmployeeRequest = {
+    // Build a fresh payload with a unique email for each test so the live create
+    // path returns 201 rather than 409 on repeated runs.
+    function validPayload(): CreateEmployeeRequest {
+      return {
         FirstName: "Alice",
         LastName: "Example",
         Department: "Engineering",
-        Email: "alice@example.com",
+        Email: uniqueEmail("s1"),
       };
+    }
+
+    it("returns status 201", async () => {
+      const payload = validPayload();
 
       if (isMock()) {
         vi.mocked(fetch).mockResolvedValueOnce({
@@ -100,12 +133,7 @@ describe("Use Case #1 — Create Employee Record", () => {
     });
 
     it("returns a server-generated Id greater than 0", async () => {
-      const payload: CreateEmployeeRequest = {
-        FirstName: "Alice",
-        LastName: "Example",
-        Department: "Engineering",
-        Email: "alice@example.com",
-      };
+      const payload = validPayload();
 
       if (isMock()) {
         vi.mocked(fetch).mockResolvedValueOnce({
@@ -127,12 +155,7 @@ describe("Use Case #1 — Create Employee Record", () => {
     });
 
     it("echoes back FirstName, LastName, Department, and Email", async () => {
-      const payload: CreateEmployeeRequest = {
-        FirstName: "Alice",
-        LastName: "Example",
-        Department: "Engineering",
-        Email: "alice@example.com",
-      };
+      const payload = validPayload();
 
       if (isMock()) {
         vi.mocked(fetch).mockResolvedValueOnce({
@@ -155,21 +178,47 @@ describe("Use Case #1 — Create Employee Record", () => {
   // ── S2: Duplicate email ───────────────────────────────────────────────────
 
   describe("S2 — given a duplicate email, when POST /employees, then 409", () => {
-    it("returns status 409 and an error message referencing the duplicate email", async () => {
+    it("creates an employee, then rejects a second POST with the same email (409)", async () => {
+      // Self-seeding: this test does NOT rely on any record already existing in
+      // the tenant. It first creates an employee with an email unique to this run,
+      // then posts the SAME email again and expects a 409 duplicate rejection.
+      const email = uniqueEmail("s2");
+
+      const first: CreateEmployeeRequest = {
+        FirstName: "Bob",
+        LastName: "Original",
+        Department: "HR",
+        Email: email,
+      };
       const duplicate: CreateEmployeeRequest = {
         FirstName: "Bob",
         LastName: "Duplicate",
         Department: "HR",
-        Email: "alice@example.com", // already exists
+        Email: email, // same email as the record just created
       };
 
+      // Step 1 — create the first record (expect 201).
+      if (isMock()) {
+        vi.mocked(fetch).mockResolvedValueOnce({
+          ok: true,
+          status: 201,
+          headers: new Headers({ "content-type": "application/json" }),
+          json: async () => ({ Id: 1, ...first } satisfies CreateEmployeeResponse),
+          text: async () => "",
+        } as unknown as Response);
+      }
+
+      const createRes = await client.post<CreateEmployeeResponse>("/employees", first);
+      expect(createRes.status).toBe(201);
+
+      // Step 2 — post the same email again (expect 409 duplicate).
       if (isMock()) {
         vi.mocked(fetch).mockResolvedValueOnce({
           ok: false,
           status: 409,
           headers: new Headers({ "content-type": "application/json" }),
           json: async () => ({
-            Errors: ["An employee with email 'alice@example.com' already exists."],
+            Errors: [`An employee with email '${email}' already exists.`],
             StatusCode: 409,
           } satisfies OutSystemsErrorResponse),
           text: async () => "",
@@ -181,7 +230,8 @@ describe("Use Case #1 — Create Employee Record", () => {
       expect(res.ok).toBe(false);
       expect(res.data.Errors).toBeDefined();
       expect(res.data.Errors.length).toBeGreaterThan(0);
-      expect(res.data.Errors[0]).toMatch(/alice@example\.com/i);
+      // Error message should reference the duplicate email.
+      expect(res.data.Errors[0]).toContain(email);
     });
   });
 
@@ -220,26 +270,29 @@ describe("Use Case #1 — Create Employee Record", () => {
   // ── S4: Empty request body ────────────────────────────────────────────────
 
   describe("S4 — given no request body, when POST /employees, then 400 with OutSystems error shape", () => {
-    it("returns status 400 with the OutSystems built-in missing-body error", async () => {
+    it("returns status 400 with the ODC built-in missing-body validation error", async () => {
       if (isMock()) {
         vi.mocked(fetch).mockResolvedValueOnce({
           ok: false,
           status: 400,
           headers: new Headers({ "content-type": "application/json" }),
           json: async () => ({
-            Errors: ["The request body is missing."],
-            StatusCode: 400,
-          } satisfies OutSystemsErrorResponse),
+            errors: { ValidationErrors: ["The request body is missing."] },
+            title: "One or more validation errors occurred.",
+            status: 400,
+          } satisfies OdcValidationErrorResponse),
           text: async () => "",
         } as unknown as Response);
       }
 
-      // Pass undefined body — OutSystems returns its built-in missing-body error
-      const res = await client.post<OutSystemsErrorResponse>("/employees", undefined);
+      // Pass undefined body. ODC's framework-level request validation rejects it
+      // BEFORE the action flow runs, returning the platform's built-in error shape
+      // ({ errors: { ValidationErrors: [...] }, ... }) rather than our custom shape.
+      const res = await client.post<OdcValidationErrorResponse>("/employees", undefined);
       expect(res.status).toBe(400);
       expect(res.ok).toBe(false);
-      expect(res.data.Errors).toContain("The request body is missing.");
-      expect(res.data.StatusCode).toBe(400);
+      expect(res.data.errors.ValidationErrors).toContain("The request body is missing.");
+      expect(res.data.status).toBe(400);
     });
   });
 });

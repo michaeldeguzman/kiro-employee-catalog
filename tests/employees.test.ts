@@ -14,7 +14,8 @@ import { OutSystemsClient } from "../src/client.js";
 
 interface Employee {
   Id: number;
-  Name: string;
+  FirstName: string;
+  LastName: string;
   Email: string;
   Department: string;
   JobTitle: string;
@@ -50,7 +51,8 @@ function makeClient() {
         Employees: [
           {
             Id: 1,
-            Name: "Alice Example",
+            FirstName: "Alice",
+            LastName: "Example",
             Email: "alice@example.com",
             Department: "Engineering",
             JobTitle: "Software Developer",
@@ -92,7 +94,8 @@ describe("Employee Catalog API", () => {
       const res = await client.get<EmployeeListResponse>("/employees");
       for (const emp of res.data.Employees) {
         expect(emp).toHaveProperty("Id");
-        expect(emp).toHaveProperty("Name");
+        expect(emp).toHaveProperty("FirstName");
+        expect(emp).toHaveProperty("LastName");
         expect(emp).toHaveProperty("Email");
         expect(emp).toHaveProperty("Department");
       }
@@ -113,7 +116,8 @@ describe("Employee Catalog API", () => {
       // Re-stub for a single-employee response
       const singleEmployee: Employee = {
         Id: 1,
-        Name: "Alice Example",
+        FirstName: "Alice",
+        LastName: "Example",
         Email: "alice@example.com",
         Department: "Engineering",
         JobTitle: "Software Developer",
@@ -155,8 +159,10 @@ describe("Employee Catalog API", () => {
   describe("POST /employees", () => {
     it("creates a new employee and returns 201", async () => {
       const newEmployee = {
-        Name: "Bob Tester",
-        Email: "bob.tester@example.com",
+        FirstName: "Bob",
+        LastName: "Tester",
+        // Unique email per run so the live create path returns 201, not 409.
+        Email: `bob.tester.${Date.now()}.${Math.floor(Math.random() * 1e6)}@example.com`,
         Department: "QA",
         JobTitle: "Test Engineer",
       };
