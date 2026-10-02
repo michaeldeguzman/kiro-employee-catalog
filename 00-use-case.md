@@ -13,15 +13,15 @@
 **Description**:
 An HR user wants to create an employee record with FirstName, LastName, Department, and Email. The system must generate a unique identifier and reject any duplicate email addresses.
 
-**Status**: In Progress
-**Current Phase**: Green
-**Last Phase Completed**: Green (verified against the live ODC tenant)
-**Last Updated**: 2026-10-02 06:45
+**Status**: Not Started
+**Current Phase**: Red
+**Last Phase Completed**: None (new app EmployeeCatalogMCP, REST API not built yet)
+**Last Updated**: 2026-10-02 10:35
 **Test Count**: 6 tests (Scenario 1 has 3 tests)
 **Test File**: `tests/create-employee.test.ts`
-**Last Live Run**: 2026-10-02, against the ODC Development tenant (OUTSYSTEMS_BASE_URL set). All 6 Use Case #1 tests passed: S1 (3 tests) 201 + generated Id + echoed fields; S2 self-seeds (create 201, then duplicate 409); S3 400 with Errors array; S4 400 with the ODC built-in `errors.ValidationErrors` body.
+**Last Live Run**: None against EmployeeCatalogMCP. The earlier 6/6 live pass was against the original EmployeeCatalog app, built through Mentor Web.
 
-> Note: Green here reflects a live run against the ODC app. A mock run (OUTSYSTEMS_BASE_URL unset) also passes 20/20 but is not sufficient to claim Green on its own — it exercises stubbed fetch, not the tenant.
+> Note: Move to Green only after a live run passes against EmployeeCatalogMCP. A mock run (OUTSYSTEMS_BASE_URL unset) is not sufficient to claim Green on its own, because it exercises stubbed fetch, not the tenant.
 
 ### Scenarios (GWT)
 

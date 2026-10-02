@@ -4,8 +4,8 @@
 **Platform:** OutSystems Developer Cloud (ODC)
 **Tool:** AI Mentor Web — App Generation via Requirement Document
 **Input format:** `.md` (Markdown)
-**Version:** 2.0
-**Date:** 2026-10-01
+**Version:** 2.1
+**Date:** 2026-10-02
 
 > **Authoring note:** This document follows the [ODC Requirement Document specification](https://success.outsystems.com/documentation/outsystems_developer_cloud/agentic_development/ai_app_generation_in_mentor_web/use_requirement_documents/) for AI Mentor Web. Sections, data type labels, role definitions, and screen patterns use the exact vocabulary Mentor Web expects to generate accurate blueprints.
 
@@ -316,9 +316,11 @@ Logic flow:
 1. Map request body fields onto a local Employee record.
 2. Call Employee_Upsert(Employee).
 3. If EntityActionResult.IsSuccess = False:
-   - Call Response_SetStatusCode(409)
+   - If the failure is a duplicate email: Call Response_SetStatusCode(409)
+   - For any other validation failure (for example a missing required field): Call Response_SetStatusCode(400)
    - Raise UserException with EntityActionResult.CombinedEntityMessageText
-4. If IsSuccess = True:
+4. If an unexpected exception occurs: Call Response_SetStatusCode(500) and return the exception message in the Errors list.
+5. If IsSuccess = True:
    - Call Response_SetStatusCode(201)
    - Return the response structure below.
 
@@ -331,8 +333,12 @@ Output structure (HTTP 201):
 - JobTitle: Text
 
 Error responses:
-- HTTP 400: returned automatically by ODC for missing body or malformed request (built-in validation)
-  Body shape: { "Errors": ["The request body is missing."], "StatusCode": 400 }
+- HTTP 400 (missing body or malformed request): returned by the ODC framework before the action flow runs, so the body shape cannot be customised.
+  Body shape: { "errors": { "ValidationErrors": ["The request body is missing."] }, plus other framework-generated fields }
+- HTTP 400 (validation failure, for example a missing required field): set via Response_SetStatusCode(400) before Raise Error
+  Body shape: { "Errors": ["<one message per failed rule>"], "StatusCode": 400 }
+- HTTP 500: unexpected exception
+  Body shape: { "Errors": ["<exception message>"], "StatusCode": 500 }
 - HTTP 409: duplicate email — set via Response_SetStatusCode(409) before Raise Error
   Body shape: { "Errors": ["An employee with email '...' already exists."], "StatusCode": 409 }
 ```
@@ -502,6 +508,6 @@ Rule 8 — Safe DateTime defaults prevent deployment failure
 CreatedOn and UpdatedOn use default value #1900-01-01 00:00:00# to avoid ODC deployment error OS-DPL-50205 when these attributes are added to an entity that already has data.
 
 Rule 9 — REST error codes require explicit Response_SetStatusCode
-ODC defaults to HTTP 200 on success. Call Response_SetStatusCode(201) for record creation. Call Response_SetStatusCode(409) before Raise Error for duplicate email. Call Response_SetStatusCode(404) before Raise Error for not-found.
+ODC defaults to HTTP 200 on success. Call Response_SetStatusCode(201) for record creation. Call Response_SetStatusCode(409) before Raise Error for duplicate email. Call Response_SetStatusCode(400) before Raise Error for any other validation failure. Call Response_SetStatusCode(404) before Raise Error for not-found.
 Reference: https://success.outsystems.com/documentation/outsystems_developer_cloud/integration_with_external_systems/exposing_rest_apis/change_the_http_status_code_of_a_rest_api/
 ```
