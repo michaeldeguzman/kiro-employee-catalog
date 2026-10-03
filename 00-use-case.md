@@ -19,7 +19,7 @@ An HR user wants to create an employee record with FirstName, LastName, Departme
 **Last Updated**: 2026-10-03 20:36
 **Test Count**: 6 tests (Scenario 1 has 3 tests)
 **Test File**: `tests/create-employee.test.ts`
-**Last Live Run**: 2026-10-03, against EmployeeCatalogMCP (revision 11) on the ODC Development tenant. All 6 Use Case #1 tests passed: S1 (3 tests) 201 + generated Id + echoed fields; S2 duplicate email -> 409 with { Errors, StatusCode } body; S3 missing Email -> 400 with Errors array; S4 empty body -> 400 ODC built-in validation shape. Full suite 20/20 live.
+**Last Live Run**: 2026-10-03, against EmployeeCatalogMCP (revision 14) on the ODC Development tenant. All 6 Use Case #1 tests passed: S1 (3 tests) 201 + generated Id + echoed fields; S2 duplicate email -> 409 with { Errors, StatusCode } body; S3 missing Email -> 400 with Errors array; S4 empty body -> 400 ODC built-in validation shape. Full suite 20/20: 14 hit the live API, 6 are offline unit tests.
 
 > Note: Move to Green only after a live run passes against EmployeeCatalogMCP. A mock run (OUTSYSTEMS_BASE_URL unset) is not sufficient to claim Green on its own, because it exercises stubbed fetch, not the tenant.
 

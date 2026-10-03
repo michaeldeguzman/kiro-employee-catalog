@@ -332,7 +332,7 @@ Output structure (shared across success and error responses):
 - Email: Email
 - Department: Text
 - JobTitle: Text
-- Errors: Text List — populated only on error responses (one message per failed rule). On the HTTP 201 success response it is left unassigned, so ODC omits it from the JSON body.
+- Errors: Text List — populated only on error responses. It holds a SINGLE element: all failed-rule messages combined into one string, separated by a newline (`\r\n`), as produced by EntityActionResult_CombineEntityActionMessages and wrapped as Errors = [CombinedEntityMessageText]. It is NOT one list element per failed rule. On the HTTP 201 success response it is left unassigned, so ODC omits it from the JSON body.
 - StatusCode: Integer — populated only on error responses (409 / 400 / 500). On the HTTP 201 success response it is left unassigned, so ODC omits it from the JSON body.
 
 On HTTP 201 the body therefore contains only the six employee fields, e.g.
@@ -343,7 +343,8 @@ Error responses:
 - HTTP 400 (missing body or malformed request): returned by the ODC framework before the action flow runs, so the body shape cannot be customised.
   Body shape: { "errors": { "ValidationErrors": ["The request body is missing."] }, plus other framework-generated fields }
 - HTTP 400 (validation failure, for example a missing required field): Response_SetStatusCode(400), then assign the error body and End.
-  Body shape: { "Errors": ["<one message per failed rule>"], "StatusCode": 400 }
+  Body shape: { "Errors": ["<all failed-rule messages joined by \r\n in one string>"], "StatusCode": 400 }
+  Example (FirstName and LastName both omitted): { "Errors": ["First Name is required.\r\nLast Name is required."], "StatusCode": 400 }
 - HTTP 500: unexpected exception — Response_SetStatusCode(500), then assign the error body and End.
   Body shape: { "Errors": ["<exception message>"], "StatusCode": 500 }
 - HTTP 409: duplicate email — Response_SetStatusCode(409), then assign the error body and End.
@@ -392,27 +393,26 @@ Description: Returns a single active Employee record by Id.
 Input parameter (URL):
 - Id: Identifier, mandatory
 
-Logic flow (as currently published in EmployeeCatalogMCP, revision 11):
+Logic flow:
 1. Run Aggregate GetById: filter Employee.Id = Id AND Employee.IsActive = True, MaxRecords = 1.
 2. If count = 0:
    - Call Response_SetStatusCode(404)
-   - Raise a User Exception "Employee not found."
-3. Return HTTP 200 with the employee record (the six employee fields; Errors and StatusCode are left unassigned and omitted from the body).
+   - Assign Errors = ["Employee not found."] and StatusCode = 404 to the response structure, then End. Do not raise an exception.
+3. If a row is found: map the six employee fields to the response and return HTTP 200 (Errors and StatusCode left unassigned, so they are omitted from the body).
 
-Output structure (HTTP 200):
+Output structure (shared across success and error responses):
 - Id: Identifier
 - FirstName: Text
 - LastName: Text
 - Email: Email
 - Department: Text
 - JobTitle: Text
-(The method's output structure also carries Errors and StatusCode, but GetEmployee does not assign them, so they are absent from the 200 body.)
+- Errors: Text List — on the 404 response holds a single element "Employee not found."; unassigned (and omitted) on the HTTP 200 response.
+- StatusCode: Integer — on the 404 response holds 404; unassigned (and omitted) on the HTTP 200 response.
 
 Error responses:
-- HTTP 404: employee not found or inactive. GetEmployee sets Response_SetStatusCode(404) and then RAISES a User Exception, so the body is the ODC framework exception envelope rather than the custom { Errors, StatusCode } shape:
-  Body shape: { "errors": { "Error": ["Employee not found."] }, "title": "One or more validation errors occurred.", "status": 404, "traceId": "..." }
-
-> Known inconsistency (as of revision 11): GetEmployee still uses the Raise pattern, unlike CreateEmployee, which was changed to assign the error body and End. To make GetEmployee return the custom { "Errors": ["Employee not found."], "StatusCode": 404 } body on 404, it would need the same treatment: after Response_SetStatusCode(404), assign Errors and StatusCode to the response and End instead of raising. This has not been applied, so this section documents current published behaviour, not the preferred pattern from the section 6 intro.
+- HTTP 404: employee not found or inactive. GetEmployee sets Response_SetStatusCode(404), assigns the error body, and ends normally (no raise), returning the custom body:
+  Body shape: { "Errors": ["Employee not found."], "StatusCode": 404 }
 ```
 
 ---
