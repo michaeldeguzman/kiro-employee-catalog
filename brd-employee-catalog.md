@@ -4,8 +4,8 @@
 **Platform:** OutSystems Developer Cloud (ODC)
 **Tool:** AI Mentor Web — App Generation via Requirement Document
 **Input format:** `.md` (Markdown)
-**Version:** 2.1
-**Date:** 2026-10-02
+**Version:** 2.2
+**Date:** 2026-10-03
 
 > **Authoring note:** This document follows the [ODC Requirement Document specification](https://success.outsystems.com/documentation/outsystems_developer_cloud/agentic_development/ai_app_generation_in_mentor_web/use_requirement_documents/) for AI Mentor Web. Sections, data type labels, role definitions, and screen patterns use the exact vocabulary Mentor Web expects to generate accurate blueprints.
 
@@ -293,7 +293,7 @@ Exception handlers:
 
 Expose a REST API named **EmployeeAPI** under the Logic tab > Integrations. All methods call server action flows — never raw entity actions directly.
 
-> Per the [ODC REST API documentation](https://success.outsystems.com/documentation/outsystems_developer_cloud/integration_with_external_systems/exposing_rest_apis/change_the_http_status_code_of_a_rest_api/), use the HTTP extension action `Response_SetStatusCode` to return non-200 success codes. For custom error responses, use a User Exception with a Raise Error element after calling `Response_SetStatusCode`.
+> Per the [ODC REST API documentation](https://success.outsystems.com/documentation/outsystems_developer_cloud/integration_with_external_systems/exposing_rest_apis/change_the_http_status_code_of_a_rest_api/), use the HTTP extension action `Response_SetStatusCode` to return non-200 success codes. To return the custom `Errors` and `StatusCode` body, assign it to the response and end the flow normally. A raised exception returns ODC's framework error envelope (`errors`, `title`, `status`, `traceId`) instead.
 
 ---
 
@@ -316,30 +316,37 @@ Logic flow:
 1. Map request body fields onto a local Employee record.
 2. Call Employee_Upsert(Employee).
 3. If EntityActionResult.IsSuccess = False:
-   - If the failure is a duplicate email: Call Response_SetStatusCode(409)
-   - For any other validation failure (for example a missing required field): Call Response_SetStatusCode(400)
-   - Raise UserException with EntityActionResult.CombinedEntityMessageText
-4. If an unexpected exception occurs: Call Response_SetStatusCode(500) and return the exception message in the Errors list.
+   - If the failure is a duplicate email: Call Response_SetStatusCode(409), assign Errors = [EntityActionResult.CombinedEntityMessageText] and StatusCode = 409 to the response structure, then End.
+   - For any other validation failure (for example a missing required field): Call Response_SetStatusCode(400), assign Errors = [EntityActionResult.CombinedEntityMessageText] and StatusCode = 400 to the response structure, then End.
+4. If an unexpected exception occurs (AllExceptions handler): Call Response_SetStatusCode(500), assign Errors = [ExceptionMessage] and StatusCode = 500 to the response structure, then End.
 5. If IsSuccess = True:
    - Call Response_SetStatusCode(201)
    - Return the response structure below.
 
-Output structure (HTTP 201):
+Note: do not raise an exception on the 409/400/500 paths. Raising returns ODC's framework error envelope (errors, title, status, traceId) instead of the custom Errors/StatusCode body. Assign the body and reach a normal End node instead.
+
+Output structure (shared across success and error responses):
 - Id: Identifier (Long Integer), the platform-generated Employee Id
 - FirstName: Text
 - LastName: Text
 - Email: Email
 - Department: Text
 - JobTitle: Text
+- Errors: Text List — populated only on error responses (one message per failed rule). On the HTTP 201 success response it is left unassigned, so ODC omits it from the JSON body.
+- StatusCode: Integer — populated only on error responses (409 / 400 / 500). On the HTTP 201 success response it is left unassigned, so ODC omits it from the JSON body.
+
+On HTTP 201 the body therefore contains only the six employee fields, e.g.
+  { "Id": 34, "FirstName": "Raw", "LastName": "One", "Email": "...", "Department": "Engineering", "JobTitle": "Dev" }
+(Errors and StatusCode are absent, not null — ODC omits unassigned fields.)
 
 Error responses:
 - HTTP 400 (missing body or malformed request): returned by the ODC framework before the action flow runs, so the body shape cannot be customised.
   Body shape: { "errors": { "ValidationErrors": ["The request body is missing."] }, plus other framework-generated fields }
-- HTTP 400 (validation failure, for example a missing required field): set via Response_SetStatusCode(400) before Raise Error
+- HTTP 400 (validation failure, for example a missing required field): Response_SetStatusCode(400), then assign the error body and End.
   Body shape: { "Errors": ["<one message per failed rule>"], "StatusCode": 400 }
-- HTTP 500: unexpected exception
+- HTTP 500: unexpected exception — Response_SetStatusCode(500), then assign the error body and End.
   Body shape: { "Errors": ["<exception message>"], "StatusCode": 500 }
-- HTTP 409: duplicate email — set via Response_SetStatusCode(409) before Raise Error
+- HTTP 409: duplicate email — Response_SetStatusCode(409), then assign the error body and End.
   Body shape: { "Errors": ["An employee with email '...' already exists."], "StatusCode": 409 }
 ```
 
@@ -385,12 +392,12 @@ Description: Returns a single active Employee record by Id.
 Input parameter (URL):
 - Id: Identifier, mandatory
 
-Logic flow:
+Logic flow (as currently published in EmployeeCatalogMCP, revision 11):
 1. Run Aggregate GetById: filter Employee.Id = Id AND Employee.IsActive = True, MaxRecords = 1.
 2. If count = 0:
    - Call Response_SetStatusCode(404)
-   - Raise UserException("Employee not found.")
-3. Return HTTP 200 with the employee record.
+   - Raise a User Exception "Employee not found."
+3. Return HTTP 200 with the employee record (the six employee fields; Errors and StatusCode are left unassigned and omitted from the body).
 
 Output structure (HTTP 200):
 - Id: Identifier
@@ -399,9 +406,13 @@ Output structure (HTTP 200):
 - Email: Email
 - Department: Text
 - JobTitle: Text
+(The method's output structure also carries Errors and StatusCode, but GetEmployee does not assign them, so they are absent from the 200 body.)
 
 Error responses:
-- HTTP 404: employee not found or inactive — set via Response_SetStatusCode(404) before Raise Error
+- HTTP 404: employee not found or inactive. GetEmployee sets Response_SetStatusCode(404) and then RAISES a User Exception, so the body is the ODC framework exception envelope rather than the custom { Errors, StatusCode } shape:
+  Body shape: { "errors": { "Error": ["Employee not found."] }, "title": "One or more validation errors occurred.", "status": 404, "traceId": "..." }
+
+> Known inconsistency (as of revision 11): GetEmployee still uses the Raise pattern, unlike CreateEmployee, which was changed to assign the error body and End. To make GetEmployee return the custom { "Errors": ["Employee not found."], "StatusCode": 404 } body on 404, it would need the same treatment: after Response_SetStatusCode(404), assign Errors and StatusCode to the response and End instead of raising. This has not been applied, so this section documents current published behaviour, not the preferred pattern from the section 6 intro.
 ```
 
 ---
@@ -508,6 +519,6 @@ Rule 8 — Safe DateTime defaults prevent deployment failure
 CreatedOn and UpdatedOn use default value #1900-01-01 00:00:00# to avoid ODC deployment error OS-DPL-50205 when these attributes are added to an entity that already has data.
 
 Rule 9 — REST error codes require explicit Response_SetStatusCode
-ODC defaults to HTTP 200 on success. Call Response_SetStatusCode(201) for record creation. Call Response_SetStatusCode(409) before Raise Error for duplicate email. Call Response_SetStatusCode(400) before Raise Error for any other validation failure. Call Response_SetStatusCode(404) before Raise Error for not-found.
+ODC defaults to HTTP 200 on success. Call Response_SetStatusCode(201) for record creation. Call Response_SetStatusCode(409) then assign the error body and End for duplicate email. Call Response_SetStatusCode(400) then assign the error body and End for any other validation failure. Call Response_SetStatusCode(404) then assign the error body and End for not-found.
 Reference: https://success.outsystems.com/documentation/outsystems_developer_cloud/integration_with_external_systems/exposing_rest_apis/change_the_http_status_code_of_a_rest_api/
 ```
