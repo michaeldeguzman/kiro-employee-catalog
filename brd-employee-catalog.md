@@ -2,7 +2,7 @@
 ## Employee Catalog Application
 
 **Platform:** OutSystems Developer Cloud (ODC)
-**Tool:** AI Mentor Web — App Generation via Requirement Document
+**Tool:** OutSystems MCP server (Mentor behind it)
 **Input format:** `.md` (Markdown)
 **Version:** 2.2
 **Date:** 2026-10-03
