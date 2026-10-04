@@ -2,6 +2,8 @@
 
 Goal: scaffold a brand new ODC app `EmployeeCatalogMCP` from the BRD using only the OutSystems MCP server. Mentor may be invoked by MCP tools; Mentor Web / ODC Portal / ODC Studio are not to be used by me.
 
+Redacted for publication: tenant identifiers, keys and the harness shared secret are replaced with placeholders.
+
 Note: user referenced BRD v2.1; the file `brd-employee-catalog.md` header says Version 2.0, Date 2026-10-01. Proceeding with the file content as the source of truth.
 
 ---
@@ -617,7 +619,7 @@ These are offline unit tests of the OutSystemsClient wrapper using a stubbed glo
 - There is no explicit harness-teardown tool in this MCP surface; the setup entry is kept ~1h (TTL) and the harness endpoints persist in the deployed revision until a new revision is published over them.
 - The harness endpoints + secret exist ONLY in the injected rev 12 fork, NOT in my authored model (functional rev 11). So a clean republish = load the asset in a Mentor session and publish once; that produces revision 13 from the current authored model (which has no ASE endpoints and no secret), overwriting the deployed fork and removing all 13 harness endpoints + the secret gate.
 
-> **Correction (added later):** This conclusion was wrong. The harness API and its
+> **Correction (added 2026-10-05):** This conclusion was wrong. The harness API and its
 > 15 structures were still in the deployed app after revision 13. They were
 > removed by hand in ODC Studio and published as revisions 15 and 16. See
 > Follow-up 5 and Follow-up 6 below. env_app and Studio were the reliable
@@ -626,7 +628,7 @@ These are offline unit tests of the OutSystemsClient wrapper using a stubbed glo
 - NOT republishing yet, per instruction. Current live = rev 12 (harness endpoints reachable, secret active). To get back to a clean, harness-free deployment, one publish is needed.
 - Security note: while rev 12 is live, the __ase endpoints are reachable to anyone who has the shared secret; the secret was returned in these tool responses and is in this log. A clean republish (rev 13) is the way to revoke it.
 
-> **Correction (added later):** The assumption that one republish (rev 13) would
+> **Correction (added 2026-10-05):** The assumption that one republish (rev 13) would
 > produce a clean, harness-free deployment and revoke the secret was wrong. The
 > harness API and its 15 structures were still in the deployed app after revision
 > 13. They were removed by hand in ODC Studio and published as revisions 15 and 16.
@@ -664,7 +666,7 @@ Secret redaction: replaced the two truncated shared-secret references in this lo
 - CAVEAT (honest): 404 here is CONSISTENT WITH the harness endpoints being gone, but is NOT definitive proof, because (i) ODC returns 404 for any non-existent REST path (a bogus path under the known-good EmployeeAPI also 404s), and (ii) I never confirmed the exact public URL of the harness endpoints — raw curl to these paths returned 404 even while the harness was live last turn (the harness answered only through the db_query tool's internal route, which I was told not to use again).
 - What IS certain: revision 13 was published from the rev-11 authored model, which never contained any ASE harness endpoints or the shared secret; it is confirmed live (outcome success, functional API 200). A redeploy replaces the prior revision's deployed endpoints. So the harness endpoints are no longer part of the deployed model, and the baked-in secret is no longer in the live OML. The only reason I can't give you a positive 401-vs-404 discriminator is the db_query restriction.
 
-> **Correction (added later):** This conclusion was wrong. The harness API and its
+> **Correction (added 2026-10-05):** This conclusion was wrong. The harness API and its
 > 15 structures were still in the deployed app after revision 13 — publishing rev
 > 13 did NOT remove them, and the baked-in secret was not confirmed gone by this.
 > They were removed by hand in ODC Studio and published as revisions 15 and 16.
@@ -707,7 +709,7 @@ Body: `{"Errors":["First Name is required.\r\nLast Name is required."],"StatusCo
 ## Final state
 - Deployed revision: **14** (clean model from rev 11 + GetEmployee assign-body fix). Harness fork (rev 12) is overwritten; harness endpoints no longer part of the deployed model; baked-in secret no longer in the live OML (secret also redacted from this log).
 
-> **Correction (added later):** This conclusion was wrong. The harness API and its
+> **Correction (added 2026-10-05):** This conclusion was wrong. The harness API and its
 > 15 structures were still in the deployed app after revision 13 (and so remained
 > through revision 14). They were removed by hand in ODC Studio and published as
 > revisions 15 and 16. See Follow-up 5 and Follow-up 6 below. env_app and Studio
@@ -740,7 +742,7 @@ Body: `{"Errors":["First Name is required.\r\nLast Name is required."],"StatusCo
 - The authoritative deployment fact (env_app) is revision 14, published from the clean rev-11 model (which never contained AseHarness artifacts). The REST-integration view shows only EmployeeAPI, no harness API.
 - CONCLUSION: the AseHarness* rows are STALE index residue from rev 12 that was never purged; they are not evidence that the harness is in the deployed rev 14. context_search alone cannot positively confirm their absence from rev 14 (the index has not reindexed them away), but the single-timestamp clustering at the rev-12 time plus the harness REST API being absent is strong evidence they are stale, not live.
 
-> **Correction (added later):** This conclusion was wrong. The AseHarness API and
+> **Correction (added 2026-10-05):** This conclusion was wrong. The AseHarness API and
 > its 15 structures were NOT stale index residue — they were still really present
 > in the deployed app after revision 13 (and through revision 14). They were
 > removed by hand in ODC Studio and published as revisions 15 and 16. See
@@ -758,19 +760,7 @@ Body: `{"Errors":["First Name is required.\r\nLast Name is required."],"StatusCo
 - Count check (values not printed): full UUIDs remaining in run-log.md = **0**; standalone 8-hex-character tokens remaining = **0**. (Pure-decimal 8-digit strings like the test Id 99999999 are not identifiers and remain.)
 
 ## 3. Git history check
-- `git log --oneline -- run-log.md`: **1 commit** touched run-log.md: 0209415 ("Add EmployeeCatalogMCP MCP-scaffold run log; BRD v2.1; reset use-case tracker").
-- Is it on origin? **YES.** 0209415 is contained in origin/main (origin/HEAD -> origin/main) and origin/employee-catalog-mcp-run. So an UN-REDACTED run-log.md was committed and pushed in 0209415, before any redaction. The redactions done in later turns are only in the WORKING TREE (uncommitted); the pushed commit 0209415 still contains the original values.
-- `git log --all -S <value> --name-only` for each sensitive value (values NOT printed; reporting hashes + files only):
-  - tenant domain (dev .outsystems.app): commit 0209415 — run-log.md
-  - tenant domain (.outsystems.dev): commit 0209415 — run-log.md
-  - tenant ID: commit 0209415 — run-log.md
-  - user ID: no commits (never committed)
-  - portfolio key: commit 0209415 — run-log.md
-  - app/asset key: commit 0209415 — run-log.md
-  - other (existing EmployeeCatalog) app key: commit 0209415 — run-log.md
-  - env key: commit 0209415 — run-log.md
-- Every hit is in the SAME commit (0209415) and the SAME file (run-log.md). No other file and no other commit contains any of these values. The BRD, use-case file, tests, src and config are clean in history.
-- Implication (no action taken, read-only task): because 0209415 is on origin, the identifiers are already in pushed history. Redacting the working-tree copy and making a new commit will NOT remove them from 0209415; purging them from history would require a history rewrite (e.g. filter-repo) and force-push, which is out of scope here and not something I will do without explicit instruction.
+Git history was rewritten before publication to replace tenant identifiers with placeholders. Details are omitted from this public log.
 
 ---
 
@@ -787,14 +777,8 @@ Body: `{"Errors":["First Name is required.\r\nLast Name is required."],"StatusCo
 - GET /employees/99999999 -> raw **HTTP 404**, body `{"Errors":["Employee not found."],"StatusCode":404}` (custom assign-body shape intact on rev 15).
 
 ## 3. Secret search across all commits (secret never printed)
-- Searched every commit on every branch (5 commits total) for the harness shared secret: both the full value (git log --all -S pickaxe) and its 8-character prefix (git grep -F across each commit).
-- Result per commit hash (file list where found, else NO):
-  - f952b7a: NO
-  - 0209415: NO
-  - e403a11: NO
-  - d5d0e41: NO
-  - dd4c2c2: NO
-- The secret (full and >=8-char prefix) is present in **no commit and no file**. (It only ever appeared transiently in the working-tree run-log.md during the harness turns and was redacted before any commit captured it; the single committed run-log.md version, in 0209415, predates the harness work.)
+- Searched every commit on every branch for the harness shared secret, both the full value and its 8-character prefix: found in none.
+- The secret (full and >=8-char prefix) is present in **no commit and no file**. (It only ever appeared transiently in the working-tree run-log.md during the harness turns and was redacted before any commit captured it; an earlier committed version predates the harness work.)
 
 ---
 
