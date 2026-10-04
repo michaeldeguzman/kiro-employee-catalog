@@ -616,8 +616,22 @@ These are offline unit tests of the OutSystemsClient wrapper using a stubbed glo
 ### Teardown / clean republish
 - There is no explicit harness-teardown tool in this MCP surface; the setup entry is kept ~1h (TTL) and the harness endpoints persist in the deployed revision until a new revision is published over them.
 - The harness endpoints + secret exist ONLY in the injected rev 12 fork, NOT in my authored model (functional rev 11). So a clean republish = load the asset in a Mentor session and publish once; that produces revision 13 from the current authored model (which has no ASE endpoints and no secret), overwriting the deployed fork and removing all 13 harness endpoints + the secret gate.
+
+> **Correction (added later):** This conclusion was wrong. The harness API and its
+> 15 structures were still in the deployed app after revision 13. They were
+> removed by hand in ODC Studio and published as revisions 15 and 16. See
+> Follow-up 5 and Follow-up 6 below. env_app and Studio were the reliable
+> checks, not the context index.
+
 - NOT republishing yet, per instruction. Current live = rev 12 (harness endpoints reachable, secret active). To get back to a clean, harness-free deployment, one publish is needed.
 - Security note: while rev 12 is live, the __ase endpoints are reachable to anyone who has the shared secret; the secret was returned in these tool responses and is in this log. A clean republish (rev 13) is the way to revoke it.
+
+> **Correction (added later):** The assumption that one republish (rev 13) would
+> produce a clean, harness-free deployment and revoke the secret was wrong. The
+> harness API and its 15 structures were still in the deployed app after revision
+> 13. They were removed by hand in ODC Studio and published as revisions 15 and 16.
+> See Follow-up 5 and Follow-up 6 below. env_app and Studio were the reliable
+> checks, not the context index.
 
 ## 2. BRD wording correction (brd-employee-catalog.md, still v2.2)
 - Corrected the earlier mistake: a raised exception does NOT return an empty body — it returns ODC's framework error envelope (errors, title, status, traceId). The empty "{}" body seen at revision 10 came from the ApiBusinessException handler that ended the flow WITHOUT assigning a body, not from the raise itself.
@@ -649,6 +663,13 @@ Secret redaction: replaced the two truncated shared-secret references in this lo
 - GET and POST probes to candidate harness paths (/rest/__ase/query, /rest/EmployeeAPI/__ase/query, /rest/ASE/query, etc.) -> all HTTP 404.
 - CAVEAT (honest): 404 here is CONSISTENT WITH the harness endpoints being gone, but is NOT definitive proof, because (i) ODC returns 404 for any non-existent REST path (a bogus path under the known-good EmployeeAPI also 404s), and (ii) I never confirmed the exact public URL of the harness endpoints — raw curl to these paths returned 404 even while the harness was live last turn (the harness answered only through the db_query tool's internal route, which I was told not to use again).
 - What IS certain: revision 13 was published from the rev-11 authored model, which never contained any ASE harness endpoints or the shared secret; it is confirmed live (outcome success, functional API 200). A redeploy replaces the prior revision's deployed endpoints. So the harness endpoints are no longer part of the deployed model, and the baked-in secret is no longer in the live OML. The only reason I can't give you a positive 401-vs-404 discriminator is the db_query restriction.
+
+> **Correction (added later):** This conclusion was wrong. The harness API and its
+> 15 structures were still in the deployed app after revision 13 — publishing rev
+> 13 did NOT remove them, and the baked-in secret was not confirmed gone by this.
+> They were removed by hand in ODC Studio and published as revisions 15 and 16.
+> See Follow-up 5 and Follow-up 6 below. env_app and Studio were the reliable
+> checks, not the context index.
 
 ## 2. Convert GetEmployee to the assign-body (no-raise) pattern
 ### Call: mentor_prompt (modify GetEmployee 404 branch) runId=[ID]
@@ -685,6 +706,12 @@ Body: `{"Errors":["First Name is required.\r\nLast Name is required."],"StatusCo
 
 ## Final state
 - Deployed revision: **14** (clean model from rev 11 + GetEmployee assign-body fix). Harness fork (rev 12) is overwritten; harness endpoints no longer part of the deployed model; baked-in secret no longer in the live OML (secret also redacted from this log).
+
+> **Correction (added later):** This conclusion was wrong. The harness API and its
+> 15 structures were still in the deployed app after revision 13 (and so remained
+> through revision 14). They were removed by hand in ODC Studio and published as
+> revisions 15 and 16. See Follow-up 5 and Follow-up 6 below. env_app and Studio
+> were the reliable checks, not the context index.
 - Live behaviour (rev 14): CreateEmployee 201/409/400/500 custom body; ListEmployees 200 with Department filter + paging + TotalCount; GetEmployee 200 / 404 custom body. npm test 20/20.
 
 ---
@@ -712,6 +739,13 @@ Body: `{"Errors":["First Name is required.\r\nLast Name is required."],"StatusCo
 - The context index is eventually-consistent and holds MIXED timestamps. Functional structures carry rev-13/14 timestamps (e.g. CreateEmployeeResponse 10:35:40 with the Errors/StatusCode fields from the GetEmployee-fix; CreateEmployeeRequest/APIError 09:59:10; ListEmployeesResponse/EmployeeItem 10:08:49). ALL 15 AseHarness* structures carry the single timestamp 13:01:37, which is the rev-12 (harness fork) indexing time.
 - The authoritative deployment fact (env_app) is revision 14, published from the clean rev-11 model (which never contained AseHarness artifacts). The REST-integration view shows only EmployeeAPI, no harness API.
 - CONCLUSION: the AseHarness* rows are STALE index residue from rev 12 that was never purged; they are not evidence that the harness is in the deployed rev 14. context_search alone cannot positively confirm their absence from rev 14 (the index has not reindexed them away), but the single-timestamp clustering at the rev-12 time plus the harness REST API being absent is strong evidence they are stale, not live.
+
+> **Correction (added later):** This conclusion was wrong. The AseHarness API and
+> its 15 structures were NOT stale index residue — they were still really present
+> in the deployed app after revision 13 (and through revision 14). They were
+> removed by hand in ODC Studio and published as revisions 15 and 16. See
+> Follow-up 5 and Follow-up 6 below. env_app and Studio were the reliable checks,
+> not the context index.
 
 ### Why warningCount was 5 at rev 13 but 2 at rev 11 — CORRECTION to earlier "pre-existing" labeling:
 - Recorded counts (from Mentor validation.warningCount on the edit runs; firstMessages was [] every time, so the literal warning TEXT was never captured): rev 11 = **2**; rev 13 = **5**; rev 14 = **5**.
